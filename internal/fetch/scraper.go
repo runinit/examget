@@ -47,6 +47,21 @@ func getDataFromLink(link string) *models.QuestionData {
 	// Parse each comment individually so they render as proper markdown bullets.
 	comments := parseComments(doc)
 
+	// Extract image URLs from the question body (.card-text img).
+	// Normalise protocol-relative and root-relative URLs to absolute HTTPS.
+	var images []string
+	doc.Find(".card-text img").Each(func(i int, s *goquery.Selection) {
+		if src, exists := s.Attr("src"); exists && src != "" {
+			switch {
+			case strings.HasPrefix(src, "//"):
+				src = "https:" + src
+			case strings.HasPrefix(src, "/"):
+				src = "https://www.examtopics.com" + src
+			}
+			images = append(images, src)
+		}
+	})
+
 	return &models.QuestionData{
 		Title:        utils.CleanText(doc.Find("h1").Text()),
 		Header:       header,
@@ -56,6 +71,7 @@ func getDataFromLink(link string) *models.QuestionData {
 		Timestamp:    utils.CleanText(doc.Find(".discussion-meta-data > i").Text()),
 		QuestionLink: link,
 		Comments:     comments,
+		Images:       images,
 	}
 }
 

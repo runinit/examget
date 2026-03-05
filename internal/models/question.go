@@ -9,6 +9,7 @@ type QuestionData struct {
 	Timestamp    string
 	QuestionLink string
 	Comments     string
+	Images       []string // image URLs found in the question body
 }
 
 type FileInfo struct {
