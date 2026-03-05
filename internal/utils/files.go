@@ -58,8 +58,8 @@ func WriteData(dataList []models.QuestionData, outputPath string, commentBool bo
 		fmt.Fprintf(file, "**Timestamp: %s**\n\n", data.Timestamp)
 		fmt.Fprintf(file, "[View on ExamTopics](%s)\n\n", data.QuestionLink)
 
-		if commentBool {
-			fmt.Fprintf(file, "Comments: %s\n", data.Comments)
+		if commentBool && data.Comments != "" {
+			fmt.Fprintf(file, "### Comments\n\n%s\n", data.Comments)
 		}
 
 		fmt.Fprintf(file, "----------------------------------------\n\n")

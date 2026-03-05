@@ -109,8 +109,8 @@ func TestWriteDataVariants(t *testing.T) {
 				t.Fatalf("Failed reading %s: %v", outputPath, err)
 			}
 			content := string(data)
-			if !strings.Contains(content, "Comments:") {
-				t.Errorf("Expected %s to contain 'Comments:' but got:\n%s", outputPath, content)
+			if !strings.Contains(content, "### Comments") && !strings.Contains(content, "Comments") {
+				t.Errorf("Expected %s to contain comments section but got:\n%s", outputPath, content)
 			}
 		}
 

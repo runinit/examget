@@ -17,6 +17,8 @@ import (
 )
 
 func CleanText(raw string) string {
+	// Replace non-breaking spaces before any other processing
+	raw = strings.ReplaceAll(raw, "\u00a0", " ")
 	// Remove excessive whitespace (newlines, tabs, etc.)
 	raw = strings.TrimSpace(raw)
 	raw = strings.ReplaceAll(raw, "\n", " ")

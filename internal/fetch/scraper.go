@@ -26,6 +26,8 @@ func getDataFromLink(link string) *models.QuestionData {
 
 	var allQuestions []string
 	doc.Find("li.multi-choice-item").Each(func(i int, s *goquery.Selection) {
+		// Remove the "Most Voted" badge text before extracting choice text
+		s.Find(".most-voted-answer-badge").Remove()
 		allQuestions = append(allQuestions, utils.CleanText(s.Text()))
 	})
 
@@ -35,16 +37,128 @@ func getDataFromLink(link string) *models.QuestionData {
 		answer = string(strings.ReplaceAll(strings.ReplaceAll(answerText, " ", ""), "\n", "")[0])
 	}
 
+	// Extract only "Question #: X\nTopic #: Y" from the header — skip the
+	// boilerplate "Actual exam question from …" text and "[All X Questions]" link.
+	header := strings.TrimSpace(doc.Find(".question-discussion-header > div").Text())
+	header = strings.ReplaceAll(header, "\t", "")
+	header = strings.ReplaceAll(header, "\u00a0", " ")
+
+	// Parse each comment individually so they render as proper markdown bullets.
+	comments := parseComments(doc)
+
 	return &models.QuestionData{
 		Title:        utils.CleanText(doc.Find("h1").Text()),
-		Header:       strings.ReplaceAll(strings.TrimSpace(doc.Find(".question-discussion-header").Text()), "\t", ""),
+		Header:       header,
 		Content:      utils.CleanText(doc.Find(".card-text").Text()),
 		Questions:    allQuestions,
 		Answer:       answer,
 		Timestamp:    utils.CleanText(doc.Find(".discussion-meta-data > i").Text()),
 		QuestionLink: link,
-		Comments:     utils.CleanText(doc.Find(".discussion-container").Text()),
+		Comments:     comments,
 	}
+}
+
+// parseComments extracts each .comment-container and renders it as a markdown
+// bullet so comments are never smashed into a single line.
+func parseComments(doc *goquery.Document) string {
+	var lines []string
+
+	doc.Find(".comment-container").Each(func(i int, s *goquery.Selection) {
+		username := strings.TrimSpace(s.Find(".comment-username").Text())
+		if username == "" {
+			return
+		}
+
+		// Badge: "Highly Voted" or "Most Recent"
+		badge := strings.TrimSpace(s.Find(".badge-primary").Text())
+		// Strip trailing icon text (FontAwesome renders as extra chars)
+		if idx := strings.Index(badge, "  "); idx != -1 {
+			badge = strings.TrimSpace(badge[:idx])
+		}
+
+		// Date — also replace non-breaking spaces
+		date := strings.ReplaceAll(strings.TrimSpace(s.Find(".comment-date").Text()), "\u00a0", " ")
+
+		// Selected answer letter
+		selected := strings.TrimSpace(s.Find(".comment-selected-answers strong").Text())
+
+		// Upvote count
+		upvotes := strings.TrimSpace(s.Find(".upvote-count").Text())
+
+		// Comment body — get inner HTML, replace <br> with newline, strip tags
+		contentEl := s.Find(".comment-content")
+		contentHTML, _ := contentEl.Html()
+		contentHTML = strings.ReplaceAll(contentHTML, "<br/>", "\n")
+		contentHTML = strings.ReplaceAll(contentHTML, "<br>", "\n")
+		// Strip remaining HTML tags
+		tagRe := strings.NewReplacer("<", "<", ">", ">") // keep angle brackets from entities
+		_ = tagRe
+		plainContent := goquery.NewDocumentFromNode(contentEl.Nodes[0]).Text()
+		// Re-apply the br→newline on the raw HTML approach for accuracy
+		plainContent = stripHTMLPreservingBR(contentHTML)
+		plainContent = strings.ReplaceAll(plainContent, "\u00a0", " ")
+		plainContent = strings.TrimSpace(plainContent)
+
+		if plainContent == "" {
+			return
+		}
+
+		// Build the bullet header
+		parts := []string{fmt.Sprintf("**%s**", username)}
+		if badge != "" {
+			parts = append(parts, fmt.Sprintf("`%s`", badge))
+		}
+		if date != "" {
+			parts = append(parts, fmt.Sprintf("— *%s*", date))
+		}
+		if selected != "" {
+			parts = append(parts, fmt.Sprintf("— Selected: **%s**", selected))
+		}
+		if upvotes != "" && upvotes != "0" {
+			parts = append(parts, fmt.Sprintf("(+%s)", upvotes))
+		}
+
+		lines = append(lines, "- "+strings.Join(parts, " "))
+
+		// Blockquote each line of the comment body
+		for _, bodyLine := range strings.Split(plainContent, "\n") {
+			trimmed := strings.TrimSpace(bodyLine)
+			if trimmed != "" {
+				lines = append(lines, "  > "+trimmed)
+			} else {
+				lines = append(lines, "  >")
+			}
+		}
+		lines = append(lines, "")
+	})
+
+	return strings.Join(lines, "\n")
+}
+
+// stripHTMLPreservingBR converts HTML to plain text, treating <br> as newlines.
+func stripHTMLPreservingBR(html string) string {
+	// Already replaced <br> with \n before calling this; now strip remaining tags
+	re := strings.NewReplacer()
+	_ = re
+	// Simple tag stripper using a loop
+	var result strings.Builder
+	inTag := false
+	for _, ch := range html {
+		switch {
+		case ch == '<':
+			inTag = true
+		case ch == '>':
+			inTag = false
+		case !inTag:
+			result.WriteRune(ch)
+		}
+	}
+	// Collapse 3+ newlines to 2
+	text := result.String()
+	for strings.Contains(text, "\n\n\n") {
+		text = strings.ReplaceAll(text, "\n\n\n", "\n\n")
+	}
+	return text
 }
 
 var counter int = 0 //start counter at 1
