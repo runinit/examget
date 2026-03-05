@@ -16,6 +16,7 @@ import (
 	"examtopics-downloader/internal/utils"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/cheggaaa/pb/v3"
 )
 
 var client = utils.NewHTTPClient()
@@ -198,4 +199,42 @@ func GetCachedPages(providerName string, grepStr string, token string) []models.
 	}
 
 	return utils.SortQuestionDataByPageNumber(allData)
+}
+
+// GetPagesFromURLs scrapes content from a pre-built list of full URLs,
+// skipping the link-collection phase entirely. Useful when you already
+// have a saved-links.txt file.
+func GetPagesFromURLs(urls []string) []models.QuestionData {
+	sorted := utils.SortLinksByQuestionNumber(urls)
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, constants.MaxConcurrentRequests)
+	results := make([]*models.QuestionData, len(sorted))
+
+	rateLimiter := utils.CreateRateLimiter(constants.RequestsPerSecond)
+	defer rateLimiter.Stop()
+
+	bar := pb.StartNew(len(sorted))
+	startTime := utils.StartTime()
+
+	for i, url := range sorted {
+		wg.Add(1)
+		go func(i int, url string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			<-rateLimiter.C
+			data := getDataFromLink(url)
+			if data != nil {
+				results[i] = data
+			}
+			bar.Increment()
+		}(i, url)
+	}
+
+	wg.Wait()
+	bar.Finish()
+	fmt.Printf("Scraping completed in %s.\n", utils.TimeSince(startTime))
+
+	return utils.FilterOutNilData(results)
 }

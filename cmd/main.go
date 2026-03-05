@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"examtopics-downloader/internal/fetch"
 	"examtopics-downloader/internal/utils"
@@ -20,6 +22,7 @@ func main() {
 	saveUrls := flag.Bool("save-links", false, "Optional argument to save unique links to questions")
 	noCache := flag.Bool("no-cache", false, "Optional argument, set to disable looking through cached data on github")
 	token := flag.String("t", "", "Optional argument to make cached requests faster to gh api")
+	linksFile := flag.String("links-file", "", "Skip link collection and scrape content from URLs listed in this file (one URL per line)")
 	flag.Parse()
 
 	if *examsFlag {
@@ -28,6 +31,33 @@ func main() {
 		for _, exam := range exams {
 			fmt.Println(utils.AddToBaseUrl(exam))
 		}
+		os.Exit(0)
+	}
+
+	// If a links file is provided, skip straight to content scraping
+	if *linksFile != "" {
+		f, err := os.Open(*linksFile)
+		if err != nil {
+			log.Fatalf("Failed to open links file %q: %v", *linksFile, err)
+		}
+		defer f.Close()
+
+		var urls []string
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line != "" && !strings.HasPrefix(line, "#") {
+				urls = append(urls, line)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Fatalf("Error reading links file: %v", err)
+		}
+
+		fmt.Printf("Loaded %d URLs from %s\n", len(urls), *linksFile)
+		links := fetch.GetPagesFromURLs(urls)
+		utils.WriteData(links, *outputPath, *commentBool, *fileType)
+		fmt.Printf("Successfully saved output to %s (filetype: %s).\n", *outputPath, *fileType)
 		os.Exit(0)
 	}
 

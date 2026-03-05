@@ -3,6 +3,7 @@ package fetch
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"log"
 	"sort"
 	"strconv"
@@ -136,14 +137,14 @@ func parseComments(doc *goquery.Document) string {
 }
 
 // stripHTMLPreservingBR converts HTML to plain text, treating <br> as newlines.
-func stripHTMLPreservingBR(html string) string {
+func stripHTMLPreservingBR(rawHTML string) string {
 	// Already replaced <br> with \n before calling this; now strip remaining tags
 	re := strings.NewReplacer()
 	_ = re
 	// Simple tag stripper using a loop
 	var result strings.Builder
 	inTag := false
-	for _, ch := range html {
+	for _, ch := range rawHTML {
 		switch {
 		case ch == '<':
 			inTag = true
@@ -158,7 +159,8 @@ func stripHTMLPreservingBR(html string) string {
 	for strings.Contains(text, "\n\n\n") {
 		text = strings.ReplaceAll(text, "\n\n\n", "\n\n")
 	}
-	return text
+	// Decode HTML entities (e.g. &#39; → ' , &amp; → & , &#34; → ")
+	return html.UnescapeString(text)
 }
 
 var counter int = 0 //start counter at 1
