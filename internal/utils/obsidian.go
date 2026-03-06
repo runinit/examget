@@ -97,17 +97,19 @@ func WriteObsidianVault(dataList []models.QuestionData, vaultDir, examName strin
 	// also renders nicely as readable markdown.
 	var flashcardBuf strings.Builder
 	if includeFlashcards {
+		// YAML frontmatter tags — Obsidian registers these in its tag index
 		flashcardBuf.WriteString(fmt.Sprintf(
 			"---\ntags:\n  - flashcards/%s\n---\n\n",
 			tagSlug,
 		))
+		// Inline tag on its own line — the SR plugin needs to see #flashcards
+		// as an inline tag to register this note as a deck.
+		// Keep it on its own line with nothing else after the tag to avoid
+		// any risk of the tag parser stopping early.
+		flashcardBuf.WriteString(fmt.Sprintf("#flashcards/%s\n\n", tagSlug))
 		flashcardBuf.WriteString(fmt.Sprintf("# %s — Flashcards\n\n", examName))
-		// Inline tag so the SR plugin always finds this note
-		flashcardBuf.WriteString(fmt.Sprintf(
-			"#flashcards/%s · Practice deck powered by the [Obsidian Spaced Repetition](https://github.com/st3v3nmw/obsidian-spaced-repetition) plugin.\n\n",
-			tagSlug,
-		))
-		flashcardBuf.WriteString("---\n\n")
+		// NOTE: do NOT put --- here — it would be parsed as a horizontal rule
+		// and could confuse the card parser for the very first card.
 	}
 
 	var indexRows []string
@@ -198,23 +200,27 @@ func WriteObsidianVault(dataList []models.QuestionData, vaultDir, examName strin
 		}
 
 		// ── Flashcard (multi-line format) ──────────────────────────────────
-		// Format per obsidian-spaced-repetition plugin:
+		// CRITICAL: per the obsidian-spaced-repetition plugin spec, BOTH sides
+		// must directly "touch" the ? separator — no blank lines allowed between
+		// the question text and ?, or between ? and the answer text.
 		//
-		//   <question lines>
+		// Correct format:
+		//   Question line 1
+		//   Question line 2
+		//   A. Option A
+		//   B. Option B
 		//   ?
-		//   <answer lines>
+		//   Answer line 1
+		//   Answer line 2
 		//
-		// The blank line after the answer (before ---) ends the card.
+		// Cards are separated by a blank line (NOT ---).
 		if includeFlashcards {
-			// ── Question side ──────────────────────────────
-			// Show: topic/question ID, then the question body, then choices.
-			// We deliberately omit data.Header (which is just "Question #: X  Topic #: Y")
-			// and build a clean one-liner for the card title.
-			flashcardBuf.WriteString(fmt.Sprintf("**%s**\n\n", id))
+			// ── Question side (touches ? with no blank line) ───────────────
+			flashcardBuf.WriteString(fmt.Sprintf("**%s**\n", id))
 
 			if data.Content != "" {
 				flashcardBuf.WriteString(data.Content)
-				flashcardBuf.WriteString("\n\n")
+				flashcardBuf.WriteString("\n")
 			}
 
 			if len(data.Questions) > 0 {
@@ -225,19 +231,19 @@ func WriteObsidianVault(dataList []models.QuestionData, vaultDir, examName strin
 						flashcardBuf.WriteString("\n")
 					}
 				}
-				flashcardBuf.WriteString("\n")
 			}
 
-			// ── Separator ──────────────────────────────────
-			flashcardBuf.WriteString("?\n\n")
+			// ── Separator (must touch content above and below) ─────────────
+			flashcardBuf.WriteString("?\n")
 
-			// ── Answer side ────────────────────────────────
-			flashcardBuf.WriteString(fmt.Sprintf("**Correct Answer: %s**\n\n", data.Answer))
+			// ── Answer side (touches ? with no blank line) ─────────────────
+			flashcardBuf.WriteString(fmt.Sprintf("**Correct Answer: %s**\n", data.Answer))
 			flashcardBuf.WriteString(fmt.Sprintf("[[%s|View Question]]", qLink))
 			if hasComments {
 				flashcardBuf.WriteString(fmt.Sprintf(" · [[%s|Discussion]]", cLink))
 			}
-			flashcardBuf.WriteString("\n\n---\n\n")
+			// Blank line between cards (do NOT use --- as it creates <hr> noise)
+			flashcardBuf.WriteString("\n\n")
 		}
 
 		// ── Index row ──────────────────────────────────────────────────────
