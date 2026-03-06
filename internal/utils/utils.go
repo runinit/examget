@@ -28,9 +28,12 @@ func CleanText(raw string) string {
 	cleaned := re.ReplaceAllString(raw, " ")
 	cleaned = strings.TrimSpace(cleaned)
 
-	// Add newline before "Suggested Answer"
-	cleaned = strings.Replace(cleaned, "Suggested Answer", "\nSuggested Answer", 1)
+	// Strip "Suggested Answer: X ..." — the Answer field holds the correct letter;
+	// this community-vote indicator is noisy in notes and flashcards.
+	suggestedRe := regexp.MustCompile(`\s*Suggested Answer:\s*\S+[^\n]*`)
+	cleaned = suggestedRe.ReplaceAllString(cleaned, "")
 	cleaned = strings.ReplaceAll(cleaned, "Forgot my password", "")
+	cleaned = strings.TrimSpace(cleaned)
 
 	return cleaned
 }
